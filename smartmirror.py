@@ -148,6 +148,10 @@ class Weather(Frame):
         self.get_bus_times()
 
     def get_bus_times(self):
+        # remove all children
+        for widget in self.busContainer.winfo_children():
+            widget.destroy()
+
         bus_req_url = "http://webservices.nextbus.com/service/publicJSONFeed?command=predictions&a=%s&r=%s&s=%s" % (bus_agency, bus_route, bus_stop)
         bus_r = requests.get(bus_req_url)
         bus_obj = json.loads(bus_r.text)
