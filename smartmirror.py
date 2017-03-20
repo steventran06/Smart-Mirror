@@ -30,6 +30,10 @@ large_text_size = 48
 medium_text_size = 28
 small_text_size = 18
 
+bus_agency = '<BUS AGENCY>'
+bus_route = '<BUS LINE>'
+bus_stop = '<BUS STOP>'
+
 @contextmanager
 def setlocale(name): #thread proof function to work with locale
     with LOCALE_LOCK:
@@ -57,6 +61,22 @@ icon_lookup = {
     'hail': "assests/Hail.png"  # hail
 }
 
+class BusTimes(Frame):
+    def __init__(self, parent, bus_time=""):
+        Frame.__init__(self, parent, bg='black')
+
+        image = Image.open("assets/Bus.png")
+        image = image.resize((25, 25), Image.ANTIALIAS)
+        image = image.convert('RGB')
+        photo = ImageTk.PhotoImage(image)
+
+        self.iconLbl = Label(self, bg='black', image=photo)
+        self.iconLbl.image = photo
+        self.iconLbl.pack(side=LEFT, anchor=N)
+
+        self.busTime = bus_time
+        self.busTimeLbl = Label(self, text=self.busTime, font=('Helvetica', small_text_size), fg="white", bg="black")
+        self.busTimeLbl.pack(side=LEFT, anchor=N)
 
 class Clock(Frame):
     def __init__(self, parent, *args, **kwargs):
@@ -67,12 +87,11 @@ class Clock(Frame):
         self.timeLbl.pack(side=TOP, anchor=E)
         # initialize day of week
         self.day_of_week1 = ''
-        self.dayOWLbl = Label(self, text=self.day_of_week1, font=('Helvetica', small_text_size), fg="white", bg="black")
-        self.dayOWLbl.pack(side=TOP, anchor=E)
         # initialize date label
         self.date1 = ''
-        self.dateLbl = Label(self, text=self.date1, font=('Helvetica', small_text_size), fg="white", bg="black")
+        self.dateLbl = Label(self, text=self.date1, font=('Helvetica', medium_text_size), fg="white", bg="black")
         self.dateLbl.pack(side=TOP, anchor=E)
+
         self.tick()
 
     def tick(self):
@@ -90,15 +109,14 @@ class Clock(Frame):
                 self.timeLbl.config(text=time2)
             if day_of_week2 != self.day_of_week1:
                 self.day_of_week1 = day_of_week2
-                self.dayOWLbl.config(text=day_of_week2)
+                self.dateLbl.config(text=day_of_week2 + ', ' + date2)
             if date2 != self.date1:
                 self.date1 = date2
-                self.dateLbl.config(text=date2)
+                self.dateLbl.config(text=day_of_week2 + ', ' + date2)
             # calls itself every 200 milliseconds
             # to update the time display as needed
             # could use >200 ms, but display gets jerky
             self.timeLbl.after(200, self.tick)
-
 
 class Weather(Frame):
     def __init__(self, parent, *args, **kwargs):
@@ -106,21 +124,40 @@ class Weather(Frame):
         self.temperature = ''
         self.forecast = ''
         self.location = ''
+        self.chanceOfRain = ''
         self.currently = ''
         self.icon = ''
+        self.tempLow= ''
+        self.tempHigh= ''
+        self.tempLowHigh = ['','']
         self.degreeFrm = Frame(self, bg="black")
         self.degreeFrm.pack(side=TOP, anchor=W)
         self.temperatureLbl = Label(self.degreeFrm, font=('Helvetica', xlarge_text_size), fg="white", bg="black")
         self.temperatureLbl.pack(side=LEFT, anchor=N)
         self.iconLbl = Label(self.degreeFrm, bg="black")
         self.iconLbl.pack(side=LEFT, anchor=N, padx=20)
-        self.currentlyLbl = Label(self, font=('Helvetica', medium_text_size), fg="white", bg="black")
+        self.tempLowHighLbl = Label(self, font=('Helvetica', medium_text_size), fg="white", bg="black")
+        self.tempLowHighLbl.pack(side=TOP, anchor=W)
+        self.currentlyLbl = Label(self, font=('Helvetica', small_text_size), fg="white", bg="black")
         self.currentlyLbl.pack(side=TOP, anchor=W)
         self.forecastLbl = Label(self, font=('Helvetica', small_text_size), fg="white", bg="black")
         self.forecastLbl.pack(side=TOP, anchor=W)
-        self.locationLbl = Label(self, font=('Helvetica', small_text_size), fg="white", bg="black")
-        self.locationLbl.pack(side=TOP, anchor=W)
+        self.busContainer = Frame(self, bg="black")
+        self.busContainer.pack(side=TOP, anchor=W)
         self.get_weather()
+        self.get_bus_times()
+
+    def get_bus_times(self):
+        bus_req_url = "http://webservices.nextbus.com/service/publicJSONFeed?command=predictions&a=%s&r=%s&s=%s" % (bus_agency, bus_route, bus_stop)
+        bus_r = requests.get(bus_req_url)
+        bus_obj = json.loads(bus_r.text)
+        def bus_times(x): return str(x['minutes'])
+        busTimes2 = ', '.join(list(map(bus_times, bus_obj['predictions']['direction']['prediction']))) + ' minutes'
+
+        busTime = BusTimes(self.busContainer, busTimes2)
+        busTime.pack(side=TOP, anchor=W)
+
+        self.after(30000, self.get_bus_times)
 
     def get_ip(self):
         try:
@@ -134,7 +171,6 @@ class Weather(Frame):
 
     def get_weather(self):
         try:
-
             if latitude is None and longitude is None:
                 # get location
                 location_req_url = "http://freegeoip.net/json/%s" % self.get_ip()
@@ -159,7 +195,10 @@ class Weather(Frame):
             degree_sign= u'\N{DEGREE SIGN}'
             temperature2 = "%s%s" % (str(int(weather_obj['currently']['temperature'])), degree_sign)
             currently2 = weather_obj['currently']['summary']
-            forecast2 = weather_obj["hourly"]["summary"]
+            forecast2 = weather_obj['hourly']['summary']
+            tempLow2 =  'Low: ' + str(int(weather_obj['daily']['data'][0]['temperatureMin'])) + degree_sign
+            tempHigh2 =  'High: ' + str(int(weather_obj['daily']['data'][0]['temperatureMax'])) + degree_sign
+            chanceOfRain2 = "{0:.0f}%".format(float(weather_obj['daily']['data'][0]['precipProbability'] * 100))
 
             icon_id = weather_obj['currently']['icon']
             icon2 = None
@@ -181,22 +220,24 @@ class Weather(Frame):
                 # remove image
                 self.iconLbl.config(image='')
 
+            if self.tempLowHigh[0] != tempLow2:
+                self.tempLowHigh[0] = tempLow2
+                self.tempLowHighLbl.config(text=tempLow2 + ' | ' + tempHigh2)
+            if self.tempLowHigh[1] != tempHigh2:
+                self.tempLowHigh[1] = tempHigh2
+                self.tempLowHighLbl.config(text=tempLow2 + ' | ' + tempHigh2)
             if self.currently != currently2:
                 self.currently = currently2
-                self.currentlyLbl.config(text=currently2)
+                self.currentlyLbl.config(text='Currently: ' + currently2 + ' | Chance of Rain: ' + chanceOfRain2)
+            if self.chanceOfRain != chanceOfRain2:
+                self.chanceOfRain = chanceOfRain2
+                self.currentlyLbl.config(text='Currently: ' + currently2 + ' | Chance of Rain: ' + chanceOfRain2)
             if self.forecast != forecast2:
                 self.forecast = forecast2
-                self.forecastLbl.config(text=forecast2)
+                self.forecastLbl.config(text='Forecast: ' + forecast2)
             if self.temperature != temperature2:
                 self.temperature = temperature2
                 self.temperatureLbl.config(text=temperature2)
-            if self.location != location2:
-                if location2 == ", ":
-                    self.location = "Cannot Pinpoint Location"
-                    self.locationLbl.config(text="Cannot Pinpoint Location")
-                else:
-                    self.location = location2
-                    self.locationLbl.config(text=location2)
         except Exception as e:
             traceback.print_exc()
             print "Error: %s. Cannot get weather." % e
